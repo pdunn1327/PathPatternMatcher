@@ -30,5 +30,5 @@ for ($i = 0; $i < $path_count; $i++) {
 }
 
 var_dump($pattern_container->no_wildcards);
-echo PHP_EOL,PHPE_EOL;
+echo PHP_EOL,PHP_EOL;
 var_dump($pattern_container->wildcards);

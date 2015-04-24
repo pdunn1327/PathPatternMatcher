@@ -15,37 +15,42 @@ class PatternContainer {
   }
   
   public function addPattern($input) {
-    $length = sizeof(explode(',', $input)) - 1;
-    $pattern = $this->convertToRegExPattern($input);
+    trim($input);
+    $input = substr($input, 0, -1);
+    
+    $split_input = explode(',', $input);
+    $pattern = $this->convertToRegExPattern($split_input);
+    $length = sizeof($split_input);
+    
     if (strpos($input, '*') !== false) {
-      $this->addToArray($this->wildcards, $pattern, $index);
+      $this->wildcards = $this->addToArray($this->wildcards, $pattern, $length);
     } else {
-      $this->addToArray($this->no_wildcards, $pattern, $index);
+      $this->no_wildcards = $this->addToArray($this->no_wildcards, $pattern, $length);
     }
   }
   
-  private function convertToRegExPattern($input) {
-    $split = explode(',', $input);
-    $pattern = '/^';
+  private function convertToRegExPattern($split) {
+    $pattern = "/^";
     
     foreach ($split AS $section) {
-      if ($section == ',') {
-        $pattern += '/';
-      } elseif ($section == '*') {
-        $pattern += '[a-zA-Z0-9]+';
+      if ($section == '*') {
+        $pattern .= "[a-zA-Z0-9]+";
       } else {
-        $pattern += $section;
+        $pattern .= $section;
       }
+      $pattern .= '/';
     }
     
-    $pattern += '$/';
+    $pattern = substr($pattern, 0, -1) . "$/";
     return $pattern;
   }
   
-  private function addToArray(&$array, $pattern, $index) {
+  private function addToArray($array, $pattern, $index) {
     if (!array_key_exists($index, $array)) {
       $array[$index] = array();
     }
     $array[$index][] = $pattern;
+    
+    return $array;
   }
 }
