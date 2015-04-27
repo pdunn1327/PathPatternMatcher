@@ -1,8 +1,10 @@
 <?php
-/*
+/* A simple script to pull in data from STDIN.
+ * Accepts Patterns first and places them into a PatternContainer
+ * Then the script pulls in the paths to check and passes them to the PatternContainer for amtching
  *
- *
- *
+ * @author Patrick Dunn <pdunn1327@gmail.com>
+ * (c) 2015 Patrick Dunn
  */
 
 require_once 'PatternContainer.php';
@@ -25,10 +27,9 @@ for ($i = 0; $i < $pattern_count; $i++) {
 // we should now receive an integer giving us the number of path strings to check against
 $path_count = fgets($stream);
 
+// pull in all of the paths and then pass them to the pattern container for matching
 for ($i = 0; $i < $path_count; $i++) {
   $raw_path = fgets($stream);
+  $result = $pattern_container->findMatch($raw_path);
+  echo $result, PHP_EOL;
 }
-
-var_dump($pattern_container->no_wildcards);
-echo PHP_EOL,PHP_EOL;
-var_dump($pattern_container->wildcards);

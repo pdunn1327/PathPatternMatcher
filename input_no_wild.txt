@@ -1,0 +1,6 @@
+1
+foo,bar,baz
+3
+foo/
+foo/bar/
+foo/bar/baz/
