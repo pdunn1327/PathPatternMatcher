@@ -2,6 +2,15 @@
 /**
  * A data object to contain our patterns and then perform the pattern matching algorithm
  *
+ * In a worst-case scenario, where we have all wildcard patterns and they're all of the 
+ * same length and the wildcards all appear in the exact same position, then we'll be
+ * making O(N*M) comparisons where N is the patterns and M is the paths.
+ *
+ * On average, however, we will have a better distribution of patterns across the data
+ * structure and we will look at a much smaller subset of the total number of patterns
+ * probably along the lines of O(NlogM), as the data structure uses a trie-type structure to
+ * make educated traversal down the possible paths
+ *
  * @author Patrick Dunn <pdunn1327@gmail.com>
  * (c) 2015 Patrick Dunn
  */
@@ -14,9 +23,23 @@ class PatternContainer {
     $this->wildcards = array();
   }
   
+  /*
+   * Process the input and add it to the appropriate array as necessary, the array for 
+   * patterns with or without wildcards.
+   *
+   * @param $input string The pattern we want to process and add
+   *
+   * @return null
+   */
   public function addPattern($input) {
     // trim any leading or trailing whitespace
     trim($input);
+    
+    // if we're passed an empty string then just skip it, include a shortcut in case it's a literal string '0'
+    if (empty($input) && $input != '0') {
+      return;
+    }
+    
     // trim the trailing newline character
     $input = substr($input, 0, -1);
     // save an original copy for use later
@@ -24,73 +47,111 @@ class PatternContainer {
     
     // split the pattern into sections
     $split_input = explode(',', $input);
-    $section_count = sizeof($split_input);
     
     // now convert this into a regular expression pattern we will use later
     $pattern = $this->convertToRegExPattern($split_input);
     
     // should we add this to the wildcard array or the no wildcards array?
-    if (strpos($input, '*') !== false) {
-      // find which section has the first wildcard, will need this info later for the "best" match
-      $first_wild = null;
-      for ($i == 0; $i < sizeof($split_input); $i++) {
-        if ($split_input[$i] == '*') {
-          $first_wild = $i;
-          break;
-        }
+    $has_wildcard = false;
+    for ($i = 0; $i < sizeof($split_input); $i++) {
+      if ($split_input[$i] == '*') {
+        $has_wildcard = true;
+        break;
       }
-      
-      // now insert this pattern as appropriate
-      $this->wildcards = $this->addToArray($this->wildcards, $pattern, $original, $section_count, $first_wild);
+    }
+    
+    if ($has_wildcard) {
+      // this pattern has a wildcard, so place it as appropriate
+      $this->wildcards = $this->addToArray($this->wildcards, $pattern, $original);
     } else {
       // no wildcards, so simply place it
-      $this->no_wildcards = $this->addToArray($this->no_wildcards, $pattern, $original, $section_count, null);
+      $this->no_wildcards = $this->addToArray($this->no_wildcards, $pattern, $original);
     }
   }
   
+  /*
+   * Convert the pattern into a regular expression for storage
+   *
+   * @param array $split The pattern split into an array
+   *
+   * @return string
+   */
   private function convertToRegExPattern($split) {
     $pattern = "/^";
     
     // convert the wildcards as necessary
-    foreach ($split AS $section) {
+    for ($i = 0; $i < sizeof($split); $i++) {
+      $section = $split[$i];
       if ($section == '*') {
         $pattern .= "[a-zA-Z0-9]+";
       } else {
         $pattern .= $section;
       }
       // use this (hopefully) unique pattern as a section delineator for later
-      $pattern .= '::';
+      if ($i + 1 < sizeof($split)) {
+        $pattern .= chr(11); // ASCII tab character
+      }
     }
     
     // now finish up the pattern (and remove the trailing delineator) and then return it
-    $pattern = substr($pattern, 0, -2) . "$/";
+    $pattern .= "$/";
     return $pattern;
   }
   
-  private function addToArray($array, $pattern, $original, $section_index, $first_wild) {
-    // collect a count of wildcards
-    $wild_count = substr_count($original, '*');
+  /*
+   * A function to add the pattern to the appropriate array (wildcard or no wildcard)
+   *
+   * @param array  $array    The array (wildcard or no wildcard) that we want to add the pattern to
+   * @param string $pattern  The regex converted pattern we want to add
+   * @param string $original The original form of the pattern we want to add
+   *
+   * @return null
+   */
+  private function addToArray($array, $pattern, $original) {
+    // collect a count of wildcards and where the first wildcard appears
+    $wild_count = 0;
+    $first_wild = null;
+    $split_original = explode(',', $original);
+    $section_count = sizeof($split_original);
+    for ($i = 0; $i < sizeof($split_original); $i++) {
+      if ($split_original[$i] == '*') {
+        if (!isset($first_wild)) {
+          $first_wild = $i;
+        }
+        $wild_count++;
+      }
+    }
     
     // if the index pertaining to the count of sections does not exist, add it
-    if (!array_key_exists($section_index, $array)) {
-      $array[$section_index] = array();
+    if (!array_key_exists($section_count, $array)) {
+      $array[$section_count] = array();
       
       // and if we are dealing with the wildcards, also initialize the wildcard count sub-array as well
       if ($wild_count > 0) {
-        $array[$section_index][$wild_count] = array();
+        $array[$section_count][$wild_count] = array();
+        $array[$section_count][$wild_count][$first_wild] = array();
       }
     }
     
     // if we're dealing with wildcards, then add the pattern into the sub-array related to the first wildcard's location
     if ($wild_count > 0) {
-      $array[$section_index][$wild_count][$first_wild][] = [$pattern, $original];
+      $array[$section_count][$wild_count][$first_wild][] = [$pattern, $original];
     } else {
       // or this is really the simple, no wildcard array so just add the pattern without complication
-      $array[$section_index][] = [$pattern, $original];
+      $array[$section_count][] = [$pattern, $original];
     }
+    
     return $array;
   }
   
+  /*
+   * Searches the arrays for a pattern that matches the path supplied as input
+   * Will return 'NO MATCH' if there is no match found
+   *
+   * @param string $input The raw path that we want to attempt to match against out patterns
+   *
+   * @return string
+   */
   public function findMatch($input) {
     if (empty($input)) {
       return 'NO MATCH';
@@ -98,6 +159,11 @@ class PatternContainer {
     
     // remove the likely trailing new line character
     $input = substr($input, 0, -1);
+    
+    // if the newly trimmed string is empty, then also return NO MATCH
+   if (empty($input) && $input != '0') {
+      return 'NO MATCH';
+    }
     
     // store the original for use later
     $original = $input;
@@ -109,20 +175,23 @@ class PatternContainer {
     if (substr($input, -1) == '/') {
       $input = substr($input, 0, -1);
     }
+    
     // now replace the slashes with a (hopefully) unique character set we can split on later
-    $input = str_replace('/', '::', $input);
+    $input = str_replace('/', chr(11), $input); // ASCII tab character
     
     // might be a more efficient way of learning this, but this is more accurate
-    $section_count = sizeof(explode('::', $input));
+    $section_count = substr_count($input, chr(11)) + 1; // ASCII tab character
     
     // match on no wildcards first, if possible
     if (array_key_exists($section_count, $this->no_wildcards)) {
       $patterns = $this->no_wildcards[$section_count];
       // check all patterns of this amount of sections
-      foreach ($patterns AS $pattern) {
+      foreach ($patterns AS $regex_pattern) {
+        $pattern = substr(substr($regex_pattern[0], 2), 0, -2); // trim back on the leading /^ and trailing $/
+        
         // does it match? if so simply return it, it's better than searching wildcards
-        if (preg_match($pattern[0], $input) === 1) {
-          return $pattern[1];
+        if ($pattern == $input) {
+          return $regex_pattern[1];
         }
       }
     }
@@ -131,24 +200,26 @@ class PatternContainer {
     $matches = array();
     $best_num_wildcards = 9999999;
     
-    // redo this to only look at patterns with exact amount of sections
-    foreach ($this->wildcards AS $section_count_index => $patterns_by_wilds) {
-      
-      // if there's not enough sections, skip ahead, no need to look at these
-      if ($section_count_index < $section_count) continue;
-      
+    // get the patterns with the same number of sections
+    $patterns_by_wilds = $this->wildcards[$section_count];
+    
+    if (!empty($patterns_by_wilds)) {
       // now look at how many wildcards appeared
-      foreach ($patterns_by_wilds AS $patterns_by_wild_section) {
-        
+      $wildcard_counts = array_keys($patterns_by_wilds);
+      sort($wildcard_counts); // sort it so we look at the lowest number of wildcards first
+      
+      foreach ($wildcard_counts AS $count) {
+        $patterns_by_wildcard_count = $patterns_by_wilds[$count];
         // so now we know how many wildcards are in these patterns, let's look at the ones
-        // where the wildcards first appear the latest in the pattern
-        $in_order_wild_sections = array_reverse(array_keys($patterns_by_wild_section));
-        for ($i = 0; $i < sizeof($in_order_wild_sections); $i++) {
-          $patterns = $patterns_by_wild_section[$in_order_wild_sections[$i]];
+        //  where the wildcards first appear the latest in the pattern
+        $in_order_wild_sections = array_keys($patterns_by_wildcard_count);
+        
+        for ($i = sizeof($in_order_wild_sections) - 1; $i >= 0; $i--) {
+          $patterns = $patterns_by_wildcard_count[$in_order_wild_sections[$i]];
           
           // now let's actually examine these patterns
           foreach ($patterns AS $pattern) {
-            
+          
             // does the pattern actually match the input, given the wildcards?
             if (preg_match($pattern[0], $input) === 1) {
               // it matched, so add it to a list in case we need to compare multiple matches later
@@ -157,17 +228,9 @@ class PatternContainer {
           }
           // shortcut out if we saw any matches
           if (!empty($matches)) {
-            break;
+            break(2); // break out of all the for-loops
           }
         }
-        // shortcut out if we saw any matches
-        if (!empty($matches)) {
-          break;
-        }
-      }
-      // shortcut out if we saw any matches
-      if (!empty($matches)) {
-        break;
       }
     }
     
@@ -185,6 +248,14 @@ class PatternContainer {
     return 'NO MATCH';
   }
   
+  /*
+   * A helper function to find the best match from an array of potential candidates
+   * Can be called recursively if there's enough of a matching pattern Right To Left
+   *
+   * @param array $matches An array of patterns that we want to compare to find the best match
+   *
+   * @return string
+   */
   private function findBestMatch($matches) {
     $best_match = null;
     $best_pos = 0;
